@@ -84,6 +84,31 @@ app.get("/calender/:courseId", authMiddleware, async (req,res) => {
     })
 });
 
+app.get("/courses", authMiddleware, async (require, res) => {
+    const courses = await prismaClient.courses.findMany({
+        where:{
+            purchases:{
+                some:{
+                    userId: require.userId
+                }
+            }
+        }
+    });
+    if(!courses){
+        res.status(411).json({
+            message: "No Courses Available For the User"
+        })
+        return;
+    }
+    res.json({
+        courses: courses.map(c => ({
+            id: c.id,
+            title: c.title,
+            slug: c.slug
+        }))
+    })
+})
+
 app.listen(port , () => {
     console.log(`Listening On Port : ${port}`);
 })
