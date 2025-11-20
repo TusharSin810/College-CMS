@@ -50,8 +50,38 @@ app.post("/signin", async (req,res) => {
 
 });
 
-app.get("/calender", authMiddleware, (req,res) => {
+app.get("/calender/:courseId", authMiddleware, async (req,res) => {
+    const courseId = req.params.courseId;
+    const courses = await prismaClient.courses.findFirst({
+        where:{
+            id: courseId
+        }
+    })
 
+    const purchase = await prismaClient.purchases.findFirst({
+        where:{
+            userId: req.userId,
+            courseId: courseId
+        }
+    })
+
+    if(!purchase){
+        res.status(411).json({
+            message: "You Dont Have access To this Course"
+        })
+        return;
+    }
+
+    if(!courses) {
+        res.status(411).json({
+            message: "Course with Id not Found"
+        })
+        return;
+    }
+    res.json({
+        id: courses.id,
+        calenderId : courses.calenderNotionId,
+    })
 });
 
 app.listen(port , () => {
