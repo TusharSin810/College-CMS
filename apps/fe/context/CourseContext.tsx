@@ -1,15 +1,23 @@
-import React, { createContext, ReactNode } from "react";
+import React, { createContext, ReactNode , useContext} from "react";
 import { useCourse } from "../hooks/Course";
 
 type CourseHook = ReturnType<typeof useCourse>;
 
-const CourseContext = createContext<CourseHook | null>(null);
+const Context_course = createContext<CourseHook | null>(null);
 
 export const CourseProvider = ({children}:{children: ReactNode}) => {
-    const courses = useCourse();    
+    const courseHook = useCourse();    
     return(
-        <CourseContext.Provider value={courses}>
+        <Context_course.Provider value={courseHook}>
             {children}
-        </CourseContext.Provider>
+        </Context_course.Provider>
     )
+}
+
+export function CourseContext() {
+    const ctx = useContext(Context_course);
+    if(!ctx){
+        throw new Error("Provider Missing")
+    }
+    return ctx;
 }
