@@ -22,7 +22,7 @@ export default function CalendarView() {
       try {
         const res = await api.get(`/calender/${selectedCourse.id}`);
 
-        const notionId = res.data.id;
+        const notionId = res.data.calenderId;
 
         const embedUrl = notionId.startsWith("http")
           ? notionId
