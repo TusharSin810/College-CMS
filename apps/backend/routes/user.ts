@@ -3,8 +3,13 @@ import { prismaClient } from "db/client";
 import jwt from "jsonwebtoken"
 import { SignupSchema } from "common/inputs";
 import { authMiddleware } from "../middleware";
+import { NETWORK } from "common/solana";
+import { SendSchema } from "common/inputs";
+import axios from "axios";
+import { cli, MPC_SERVERS, MPC_THRESHOLD } from "./admin";
 
 const userRouter = Router();
+
 
 export default userRouter;
 
@@ -104,5 +109,75 @@ userRouter.get("/courses", authMiddleware, async (req, res) => {
             title: c.title,
             slug: c.slug
         }))
+    })
+})
+
+userRouter.post("/send", authMiddleware, async (req, res) => {
+    const {success, data} = SendSchema.safeParse(req.body);
+    const blockhash = await cli.recentBlockHash();
+    if(!success){
+        res.status(403).json({
+            message: "Incorrect Credentials"
+        })
+        return;
+    }
+
+    const user = await prismaClient.user.findFirst({
+        where:{
+            id: req.userId
+        }
+    });
+
+    if(!user){
+        res.status(403).json({
+            message: "User Does Not Exist"
+        })
+        return;
+    }
+
+    const step1Responses = await Promise.all(MPC_SERVERS.map(async (server) => {
+        const response = await axios.post(`${server}/send/step-1`, {
+            to: data.to,
+            amount: data.amount,
+            userId: req.userId,
+            recentBLockhash: blockhash
+        })
+        return response.data
+    }))
+
+    const step2Responses = await Promise.all(MPC_SERVERS.map(async (server, index) => {
+        const response = await axios.post(`${server}/send/step-2`, {
+            to: data.to,
+            amount: data.amount,
+            userId: req.userId,
+            recentBlockhash: blockhash,
+            step1Response: step1Responses[index],
+            allPublicNonces: JSON.stringify(step1Responses.map((r) => r.response.publicNonce))
+        })
+        return response.data
+    }))
+
+    const partialSignatures = step2Responses.map((r) => r.response);
+
+    const transactionDetails = {
+        amount: data.amount,
+        to: data.to,
+        from: user.publicKey,
+        network: NETWORK,
+        memo: undefined,
+        recentBlockhash: blockhash
+    }
+
+    const signature = await cli.aggregateSignaturesAndBroadcast(
+        JSON.stringify(partialSignatures),
+        JSON.stringify(transactionDetails),
+        JSON.stringify({
+            aggregatedPublicKey: user.publicKey,
+            participantKeys: step2Responses.map((r) => r.publicKey),
+            threshold: MPC_THRESHOLD
+        }),
+    );
+    res.json({
+        signature
     })
 })
