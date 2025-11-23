@@ -8,9 +8,9 @@ import { TSSCli } from "solana-mpc-tss-lib/mpc";
 import { NETWORK } from "common/solana";
 
 const MPC_SERVERS = [
-    "http://localhost:5001",
-    // "http://localhost:5002",
-    // "http://localhost:5003",
+    "http://localhost:4000",
+    // "http://localhost:4001",
+    // "http://localhost:4002",
 ]
 
 const MPC_THRESHOLD = Math.max(1, MPC_SERVERS.length - 1);
@@ -83,10 +83,10 @@ adminRouter.post("/create-user", AdminauthMiddleware, async (req, res) => {
         const response = await axios.post(`${server}/create-user`, {
             userId: user.id
         })
-        return response.data
+        return response.data ;
     }))
 
-    const aggregatedPublicKey = cli.aggregateKeys(responses.map((r) => r.data.publicKey), MPC_THRESHOLD)
+    const aggregatedPublicKey = cli.aggregateKeys(responses.map((r) => r.publicKey), MPC_THRESHOLD)
     await prismaClient.user.update({
         where:{id: user.id},
         data:{
@@ -94,20 +94,83 @@ adminRouter.post("/create-user", AdminauthMiddleware, async (req, res) => {
         }
     })
 
-    await cli.airdrop(aggregatedPublicKey.aggregatedPublicKey, 1000_000_000);
+    await cli.airdrop(aggregatedPublicKey.aggregatedPublicKey, 0.1);
 
     res.json({
         message: "User Created",
-        user
+        user: {
+            ...user,
+            publicKey: aggregatedPublicKey.aggregatedPublicKey
+        }
     })
 })
 
 adminRouter.post("/send", AdminauthMiddleware, async (req, res) => {
     const {success, data} = SendSchema.safeParse(req.body);
+    const blockhash = await cli.recentBlockHash();
     if(!success){
         res.status(403).json({
             message: "Incorrect Credentials"
         })
         return;
     }
+
+    const user = await prismaClient.user.findFirst({
+        where:{
+            id: req.userId
+        }
+    });
+
+    if(!user){
+        res.status(403).json({
+            message: "User Does Not Exist"
+        })
+        return;
+    }
+
+    const step1Responses = await Promise.all(MPC_SERVERS.map(async (server) => {
+        const response = await axios.post(`${server}/send/step-1`, {
+            to: data.to,
+            amount: data.amount,
+            userId: req.userId,
+            recentBLockhash: blockhash
+        })
+        return response.data
+    }))
+
+    const step2Responses = await Promise.all(MPC_SERVERS.map(async (server, index) => {
+        const response = await axios.post(`${server}/send/step-2`, {
+            to: data.to,
+            amount: data.amount,
+            userId: req.userId,
+            recentBlockhash: blockhash,
+            step1Response: step1Responses[index],
+            allPublicNonces: JSON.stringify(step1Responses.map((r) => r.response.publicNonce))
+        })
+        return response.data
+    }))
+
+    const partialSignatures = step2Responses.map((r) => r.response);
+
+    const transactionDetails = {
+        amount: data.amount,
+        to: data.to,
+        from: user.publicKey,
+        network: NETWORK,
+        memo: undefined,
+        recentBlockhash: blockhash
+    }
+
+    const signature = await cli.aggregateSignaturesAndBroadcast(
+        JSON.stringify(partialSignatures),
+        JSON.stringify(transactionDetails),
+        JSON.stringify({
+            aggregatedPublicKey: user.publicKey,
+            participantKeys: step2Responses.map((r) => r.publicKey),
+            threshold: MPC_THRESHOLD
+        }),
+    );
+    res.json({
+        signature
+    })
 })
