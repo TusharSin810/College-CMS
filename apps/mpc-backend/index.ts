@@ -13,7 +13,7 @@ app.post("/create-user", async (req, res) => {
     const {userId} = req.body;
     const participant = await cli.generate();
 
-    prismaClient.keyShare.create({
+    await prismaClient.keyShare.create({
         data:{
             userId,
             publicKey: participant.publicKey,
