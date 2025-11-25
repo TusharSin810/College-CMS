@@ -97,7 +97,7 @@ adminRouter.post("/create-user", AdminauthMiddleware, async (req, res) => {
     await cli.airdrop(aggregatedPublicKey.aggregatedPublicKey, 0.1);
 
     res.json({
-        message: "User Created",
+        message: "User Created successfully",
         user: {
             ...user,
             publicKey: aggregatedPublicKey.aggregatedPublicKey
