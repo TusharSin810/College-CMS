@@ -140,7 +140,7 @@ export class TSSSigningService {
     tx.addSignature(aggregateWallet.aggregatedPublicKey, Buffer.from(completeSignature.signature));
 
     // Broadcast the transaction
-    const txId = await this.connection.sendTransaction(tx, []);
+    const txId = await this.connection.sendRawTransaction(tx.serialize());
     await this.connection.confirmTransaction(txId);
 
     return txId;

@@ -142,7 +142,7 @@ userRouter.post("/send", authMiddleware, async (req, res) => {
             userId: req.userId,
             recentBLockhash: blockhash
         })
-        return response.data
+        return response.data.response
     }))
 
     const step2Responses = await Promise.all(MPC_SERVERS.map(async (server, index) => {
@@ -151,8 +151,8 @@ userRouter.post("/send", authMiddleware, async (req, res) => {
             amount: data.amount,
             userId: req.userId,
             recentBlockhash: blockhash,
-            step1Response: step1Responses[index],
-            allPublicNonces: JSON.stringify(step1Responses.map((r) => r.response.publicNonce))
+            step1Response: JSON.stringify(step1Responses[index]),
+            allPublicNonces: step1Responses.map((r) => r.publicNonce)
         })
         return response.data
     }))
